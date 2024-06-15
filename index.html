@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -481,7 +482,10 @@
             }
 
             // Create and draw quadrilaterals on the left side of the unfoldCanvas
-            let offsetY = 0;
+            let offsetX =  -50;
+            let offsetY = -50;
+            let remainingQuads = [];
+
             for (let i = 0; i < points2.length - 1; i++) {
                 const p1 = points2[i];
                 const p2 = points2[i + 1];
@@ -489,14 +493,69 @@
                 const m2 = midPoints2[i + 1];
 
                 const quad = [
-                    { x: p1.x, y: p1.y + offsetY, z: 0 },
-                    { x: p2.x, y: p2.y + offsetY, z: 0 },
-                    { x: m2.x, y: m2.y + offsetY, z: 0 },
-                    { x: m1.x, y: m1.y + offsetY, z: 0 }
+                    { x: p1.x, y: p1.y, z: 0 },
+                    { x: p2.x, y: p2.y, z: 0 },
+                    { x: m2.x, y: m2.y, z: 0 },
+                    { x: m1.x, y: m1.y, z: 0 }
                 ];
 
-                fillUnfoldedQuadrilateral(quad, 'rgba(211, 211, 211, 0.5)');
-                offsetY += Math.max(calculateDistance(p1, p2), calculateDistance(m1, m2)) + 10; // Add some spacing
+                remainingQuads.push(quad);
+            }
+
+            remainingQuads.sort((a, b) => Math.min(a[0].y, a[1].y, a[2].y, a[3].y) - Math.min(b[0].y, b[1].y, b[2].y, b[3].y));
+
+            while (remainingQuads.length > 0) {
+                const quad = remainingQuads.shift();
+                const minY = Math.min(quad[0].y, quad[1].y, quad[2].y, quad[3].y);
+                const offsetYAdjusted = offsetY - minY;
+
+                const movedQuad = quad.map(point => ({
+                    x: point.x + offsetX,
+                    y: point.y + offsetYAdjusted,
+                    z: point.z
+                }));
+
+                fillUnfoldedQuadrilateral(movedQuad, 'rgba(211, 211, 211, 0.5)');
+                offsetY += Math.max(calculateDistance(movedQuad[0], movedQuad[1]), calculateDistance(movedQuad[2], movedQuad[3])) + 10;
+            }
+
+            // Create and draw quadrilaterals on the right side of the unfoldCanvas
+            offsetX = 50;
+            offsetY = -50;
+            remainingQuads = [];
+
+            for (let i = 0; i < mirrorPoints2.length - 1; i++) {
+                const p1 = mirrorPoints2[i];
+                const p2 = mirrorPoints2[i + 1];
+                const m1 = centerLine2[i];
+                const m2 = centerLine2[i + 1];
+
+                const quad = [
+                    { x: p1.x, y: p1.y, z: 0 },
+                    { x: p2.x, y: p2.y, z: 0 },
+                    { x: m2.x, y: m2.y, z: 0 },
+                    { x: m1.x, y: m1.y, z: 0 }
+                ];
+
+                remainingQuads.push(quad);
+            }
+
+            remainingQuads.sort((a, b) => Math.min(a[0].y, a[1].y, a[2].y, a[3].y) - Math.min(b[0].y, b[1].y, b[2].y, b[3].y));
+
+            while (remainingQuads.length > 0) {
+                const quad = remainingQuads.shift();
+                const minY = Math.min(quad[0].y, quad[1].y, quad[2].y, quad[3].y);
+                const offsetYAdjusted = offsetY - minY;
+
+                const movedQuad = quad.map(point => ({
+                    x: point.x + offsetX,
+                    y: point.y + offsetYAdjusted,
+                    z: point.z
+                }));
+
+                fillUnfoldedQuadrilateral(movedQuad, 'rgba(211, 211, 211, 0.5)');
+                //offsetX += Math.max(calculateDistance(movedQuad[0], movedQuad[1]), calculateDistance(movedQuad[2], movedQuad[3])) + 50;
+                offsetY += 10;
             }
         }
 
@@ -570,3 +629,4 @@
     </script>
 </body>
 </html>
+```
