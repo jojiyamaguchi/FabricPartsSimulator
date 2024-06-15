@@ -4,67 +4,73 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Canvas Drawing and Rotation</title>
-    <style>
-        canvas {
-            border: 1px solid black;
-        }
-    </style>
+    <style>canvas { border: 1px solid black; }</style>
 </head>
 <body>
     <canvas id="drawingCanvas" width="500" height="500"></canvas>
-    <button id="rotateXPlusButton">↓回転</button>
-    <button id="rotateXMinusButton">↑回転</button>
+    <button id="rotateXPositiveButton">↓回転</button>
+    <button id="rotateXNegativeButton">↑回転</button>
     <div id="xRotationAngle">X回転角: 0度</div>
-    <button id="rotateYMinusButton">←回転</button>
-    <button id="rotateYPlusButton">→回転</button>
+    <button id="rotateYNegativeButton">←回転</button>
+    <button id="rotateYPositiveButton">→回転</button>
     <div id="yRotationAngle">Y回転角: 0度</div>
     <button id="resetButton">線を書き直す</button>
     <div id="lineLength">線の長さ: 0px</div>
     <button id="mirrorSymmetryResetButton">対称線リセット</button>
     <button id="createSurfaceButton">面作成</button>
+    <label><input type="checkbox" id="surfaceDisplayCheckbox"> 面表示</label>
+    <canvas id="unfoldCanvas" width="500" height="500"></canvas>
 
     <script>
         const drawingCanvas = document.getElementById('drawingCanvas');
-        const drawingCtx = drawingCanvas.getContext('2d');
+        const drawingContext = drawingCanvas.getContext('2d');
         const centerX = drawingCanvas.width / 2;
         const centerY = drawingCanvas.height / 2;
-        let drawing = false;
+
+        const unfoldCanvas = document.getElementById('unfoldCanvas');
+        const unfoldContext = unfoldCanvas.getContext('2d');
+        const unfoldCenterX = unfoldCanvas.width / 2;
+        const unfoldCenterY = unfoldCanvas.height / 2;
+
+        let isDrawing = false;
         let points = [];
         let angleX = 0;
         let angleY = 0;
         let currentLine = [];
-        let draggingPoint = null;
-        let draggingMirroredPoint = null;
-        let draggingMidPoint = null;
+        let draggedPoint = null;
+        let draggedMirrorPoint = null;
+        let draggedMidPoint = null;
         let lastPoint = null;
-        let mirroredPoints = [];
+        let mirrorPoints = [];
         let midPoints = [];
-        let centerLine2 = [];
+        let centerLine = [];
+        let surfaceDisplay = false;
 
-        drawingCanvas.addEventListener('mousedown', (e) => {
-            if (currentLine.length === 0) {
-                drawing = true;
-                const startPoint = { x: e.offsetX - centerX, y: e.offsetY - centerY, z: 0 };
+        // Mouse down event for drawing or dragging points
+        drawingCanvas.addEventListener('mousedown', event => {
+            if (!currentLine.length) {
+                isDrawing = true;
+                const startPoint = { x: event.offsetX - centerX, y: event.offsetY - centerY, z: 0 };
                 points.push(startPoint);
                 currentLine.push(startPoint);
                 drawPoint(startPoint);
                 lastPoint = startPoint;
             } else {
-                const clickedPoint = getClickedPoint(e.offsetX, e.offsetY);
+                const clickedPoint = getClickedPoint(event.offsetX, event.offsetY);
                 if (clickedPoint) {
-                    draggingPoint = clickedPoint;
+                    draggedPoint = clickedPoint;
                 } else {
-                    const clickedMirroredPoint = getClickedMirroredPoint(e.offsetX, e.offsetY);
-                    if (clickedMirroredPoint) {
-                        draggingMirroredPoint = clickedMirroredPoint;
+                    const clickedMirrorPoint = getClickedMirrorPoint(event.offsetX, event.offsetY);
+                    if (clickedMirrorPoint) {
+                        draggedMirrorPoint = clickedMirrorPoint;
                     } else {
-                        const clickedMidPoint = getClickedMidPoint(e.offsetX, e.offsetY);
+                        const clickedMidPoint = getClickedMidPoint(event.offsetX, event.offsetY);
                         if (clickedMidPoint) {
-                            draggingMidPoint = clickedMidPoint;
+                            draggedMidPoint = clickedMidPoint;
                         } else {
-                            const newPoint = getNewPointOnLine(e.offsetX, e.offsetY);
-                            if (newPoint) {
-                                points.splice(newPoint.index, 0, newPoint.point);
+                            const newPointOnLine = getNewPointOnLine(event.offsetX, event.offsetY);
+                            if (newPointOnLine) {
+                                points.splice(newPointOnLine.index, 0, newPointOnLine.point);
                                 redrawCanvas();
                             }
                         }
@@ -73,39 +79,41 @@
             }
         });
 
-        drawingCanvas.addEventListener('mousemove', (e) => {
-            if (drawing) {
-                const x = e.offsetX - centerX;
-                const y = e.offsetY - centerY;
-                const endPoint = { x: x, y: y, z: 0 };
-                if (lastPoint && distance(lastPoint, endPoint) >= 50) {
+        // Mouse move event for drawing or dragging points
+        drawingCanvas.addEventListener('mousemove', event => {
+            if (isDrawing) {
+                const x = event.offsetX - centerX;
+                const y = event.offsetY - centerY;
+                const endPoint = { x, y, z: 0 };
+                if (lastPoint && calculateDistance(lastPoint, endPoint) >= 50) {
                     points.push(endPoint);
                     drawPoint(endPoint);
                     drawLine(lastPoint, endPoint);
                     lastPoint = endPoint;
                     updateLineLength();
                 }
-            } else if (draggingPoint) {
-                draggingPoint.x = e.offsetX - centerX;
-                draggingPoint.y = e.offsetY - centerY;
+            } else if (draggedPoint) {
+                draggedPoint.x = event.offsetX - centerX;
+                draggedPoint.y = event.offsetY - centerY;
                 redrawCanvas();
                 updateLineLength();
-            } else if (draggingMirroredPoint) {
-                draggingMirroredPoint.x = e.offsetX - centerX;
-                draggingMirroredPoint.y = e.offsetY - centerY;
+            } else if (draggedMirrorPoint) {
+                draggedMirrorPoint.x = event.offsetX - centerX;
+                draggedMirrorPoint.y = event.offsetY - centerY;
                 redrawCanvas();
                 updateLineLength();
-            } else if (draggingMidPoint) {
-                draggingMidPoint.x = e.offsetX - centerX;
-                draggingMidPoint.y = e.offsetY - centerY;
+            } else if (draggedMidPoint) {
+                draggedMidPoint.x = event.offsetX - centerX;
+                draggedMidPoint.y = event.offsetY - centerY;
                 redrawCanvas();
                 updateLineLength();
             }
         });
 
+        // Mouse up event to stop drawing or dragging
         drawingCanvas.addEventListener('mouseup', () => {
-            if (drawing) {
-                drawing = false;
+            if (isDrawing) {
+                isDrawing = false;
                 if (points.length > 1) {
                     const startPoint = points[0];
                     const endPoint = points[points.length - 1];
@@ -114,41 +122,34 @@
                 }
                 lastPoint = null;
             }
-            draggingPoint = null;
-            draggingMirroredPoint = null;
-            draggingMidPoint = null;
+            draggedPoint = null;
+            draggedMirrorPoint = null;
+            draggedMidPoint = null;
         });
 
-        document.getElementById('rotateXPlusButton').addEventListener('click', () => {
-            rotatePointsX(10);
-        });
+        // Event listeners for rotation buttons
+        document.getElementById('rotateXPositiveButton').addEventListener('click', () => rotatePointsX(10));
+        document.getElementById('rotateXNegativeButton').addEventListener('click', () => rotatePointsX(-10));
+        document.getElementById('rotateYPositiveButton').addEventListener('click', () => rotatePointsY(10));
+        document.getElementById('rotateYNegativeButton').addEventListener('click', () => rotatePointsY(-10));
 
-        document.getElementById('rotateXMinusButton').addEventListener('click', () => {
-            rotatePointsX(-10);
-        });
-
-        document.getElementById('rotateYPlusButton').addEventListener('click', () => {
-            rotatePointsY(10);
-        });
-
-        document.getElementById('rotateYMinusButton').addEventListener('click', () => {
-            rotatePointsY(-10);
-        });
-
+        // Event listener for reset button
         document.getElementById('resetButton').addEventListener('click', () => {
             points = [];
             currentLine = [];
             angleX = 0;
             angleY = 0;
-            mirroredPoints = [];
+            mirrorPoints = [];
             midPoints = [];
-            centerLine2 = [];
-            drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            centerLine = [];
+            drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            unfoldContext.clearRect(0, 0, unfoldCanvas.width, unfoldCanvas.height);
             document.getElementById('xRotationAngle').innerText = `X回転角: 0度`;
             document.getElementById('yRotationAngle').innerText = `Y回転角: 0度`;
             document.getElementById('lineLength').innerText = `線の長さ: 0px`;
         });
 
+        // Event listener for mirror symmetry reset button
         document.getElementById('mirrorSymmetryResetButton').addEventListener('click', () => {
             if (points.length > 1) {
                 const startPoint = points[0];
@@ -158,118 +159,131 @@
             }
         });
 
+        // Event listener for create surface button
         document.getElementById('createSurfaceButton').addEventListener('click', () => {
             if (points.length > 1) {
-                createCenterLine2();
+                createCenterLine();
                 drawSurface();
             }
         });
 
+        // Event listener for surface display checkbox
+        document.getElementById('surfaceDisplayCheckbox').addEventListener('change', event => {
+            surfaceDisplay = event.target.checked;
+            if (surfaceDisplay && points.length > 1) {
+                createCenterLine();
+                drawSurface();
+            } else {
+                redrawCanvas();
+            }
+        });
+
+        // Rotate points around X-axis
         function rotatePointsX(angleIncrement) {
             angleX = (angleX + angleIncrement) % 360;
-            const angleXRadian = angleIncrement * Math.PI / 180;
+            const angleXInRadians = angleIncrement * Math.PI / 180;
             points = points.map(point => {
-                const y = point.y * Math.cos(angleXRadian) - point.z * Math.sin(angleXRadian);
-                const z = point.y * Math.sin(angleXRadian) + point.z * Math.cos(angleXRadian);
-                return { x: point.x, y: y, z: z };
+                const y = point.y * Math.cos(angleXInRadians) - point.z * Math.sin(angleXInRadians);
+                const z = point.y * Math.sin(angleXInRadians) + point.z * Math.cos(angleXInRadians);
+                return { x: point.x, y, z };
             });
-            mirroredPoints = mirroredPoints.map(point => {
-                const y = point.y * Math.cos(angleXRadian) - point.z * Math.sin(angleXRadian);
-                const z = point.y * Math.sin(angleXRadian) + point.z * Math.cos(angleXRadian);
-                return { x: point.x, y: y, z: z };
+            mirrorPoints = mirrorPoints.map(point => {
+                const y = point.y * Math.cos(angleXInRadians) - point.z * Math.sin(angleXInRadians);
+                const z = point.y * Math.sin(angleXInRadians) + point.z * Math.cos(angleXInRadians);
+                return { x: point.x, y, z };
             });
             midPoints = midPoints.map(point => {
-                const y = point.y * Math.cos(angleXRadian) - point.z * Math.sin(angleXRadian);
-                const z = point.y * Math.sin(angleXRadian) + point.z * Math.cos(angleXRadian);
-                return { x: point.x, y: y, z: z };
+                const y = point.y * Math.cos(angleXInRadians) - point.z * Math.sin(angleXInRadians);
+                const z = point.y * Math.sin(angleXInRadians) + point.z * Math.cos(angleXInRadians);
+                return { x: point.x, y, z };
             });
             redrawCanvas();
             document.getElementById('xRotationAngle').innerText = `X回転角: ${angleX}度`;
             updateLineLength();
         }
 
+        // Rotate points around Y-axis
         function rotatePointsY(angleIncrement) {
             angleY = (angleY + angleIncrement) % 360;
-            const angleYRadian = angleIncrement * Math.PI / 180;
+            const angleYInRadians = angleIncrement * Math.PI / 180;
             points = points.map(point => {
-                const x = point.x * Math.cos(angleYRadian) - point.z * Math.sin(angleYRadian);
-                const z = point.x * Math.sin(angleYRadian) + point.z * Math.cos(angleYRadian);
-                return { x: x, y: point.y, z: z };
+                const x = point.x * Math.cos(angleYInRadians) - point.z * Math.sin(angleYInRadians);
+                const z = point.x * Math.sin(angleYInRadians) + point.z * Math.cos(angleYInRadians);
+                return { x, y: point.y, z };
             });
-            mirroredPoints = mirroredPoints.map(point => {
-                const x = point.x * Math.cos(angleYRadian) - point.z * Math.sin(angleYRadian);
-                const z = point.x * Math.sin(angleYRadian) + point.z * Math.cos(angleYRadian);
-                return { x: x, y: point.y, z: z };
+            mirrorPoints = mirrorPoints.map(point => {
+                const x = point.x * Math.cos(angleYInRadians) - point.z * Math.sin(angleYInRadians);
+                const z = point.x * Math.sin(angleYInRadians) + point.z * Math.cos(angleYInRadians);
+                return { x, y: point.y, z };
             });
             midPoints = midPoints.map(point => {
-                const x = point.x * Math.cos(angleYRadian) - point.z * Math.sin(angleYRadian);
-                const z = point.x * Math.sin(angleYRadian) + point.z * Math.cos(angleYRadian);
-                return { x: x, y: point.y, z: z };
+                const x = point.x * Math.cos(angleYInRadians) - point.z * Math.sin(angleYInRadians);
+                const z = point.x * Math.sin(angleYInRadians) + point.z * Math.cos(angleYInRadians);
+                return { x, y: point.y, z };
             });
             redrawCanvas();
             document.getElementById('yRotationAngle').innerText = `Y回転角: ${angleY}度`;
             updateLineLength();
         }
 
+        // Draw a point on the canvas
         function drawPoint(point, color = 'black') {
-            const size = Math.max(1, (10 - point.z / 20) * 0.75); // Z座標に基づいて点のサイズを調整（変化の度合いを半分に）
-            drawingCtx.beginPath();
-            drawingCtx.arc(point.x + centerX, point.y + centerY, size, 0, 2 * Math.PI);
-            drawingCtx.fillStyle = color;
-            drawingCtx.fill();
+            const size = Math.max(1, (10 - point.z / 20) * 0.75);
+            drawingContext.beginPath();
+            drawingContext.arc(point.x + centerX, point.y + centerY, size, 0, 2 * Math.PI);
+            drawingContext.fillStyle = color;
+            drawingContext.fill();
         }
 
+        // Draw a line between two points on the canvas
         function drawLine(start, end, color = 'black') {
-            drawingCtx.beginPath();
-            drawingCtx.moveTo(start.x + centerX, start.y + centerY);
-            drawingCtx.lineTo(end.x + centerX, end.y + centerY);
-            drawingCtx.strokeStyle = color;
-            drawingCtx.stroke();
+            drawingContext.beginPath();
+            drawingContext.moveTo(start.x + centerX, start.y + centerY);
+            drawingContext.lineTo(end.x + centerX, end.y + centerY);
+            drawingContext.strokeStyle = color;
+            drawingContext.stroke();
         }
 
+        // Get the clicked point from the points array
         function getClickedPoint(x, y) {
             for (const point of points) {
                 const dx = x - (point.x + centerX);
                 const dy = y - (point.y + centerY);
-                if (Math.sqrt(dx * dx + dy * dy) < 5) {
-                    return point;
-                }
+                if (Math.sqrt(dx * dx + dy * dy) < 5) return point;
             }
             return null;
         }
 
-        function getClickedMirroredPoint(x, y) {
-            for (const point of mirroredPoints) {
+        // Get the clicked mirror point from the mirror points array
+        function getClickedMirrorPoint(x, y) {
+            for (const point of mirrorPoints) {
                 const dx = x - (point.x + centerX);
                 const dy = y - (point.y + centerY);
-                if (Math.sqrt(dx * dx + dy * dy) < 5) {
-                    return point;
-                }
+                if (Math.sqrt(dx * dx + dy * dy) < 5) return point;
             }
             return null;
         }
 
+        // Get the clicked mid point from the mid points array
         function getClickedMidPoint(x, y) {
             for (const point of midPoints) {
                 const dx = x - (point.x + centerX);
                 const dy = y - (point.y + centerY);
-                if (Math.sqrt(dx * dx + dy * dy) < 5) {
-                    return point;
-                }
+                if (Math.sqrt(dx * dx + dy * dy) < 5) return point;
             }
             return null;
         }
 
+        // Get a new point on the line based on the clicked position
         function getNewPointOnLine(x, y) {
-            const clickX = x - centerX;
-            const clickY = y - centerY;
+            const clickedX = x - centerX;
+            const clickedY = y - centerY;
             for (let i = 0; i < points.length - 1; i++) {
                 const start = points[i];
                 const end = points[i + 1];
-                const distanceToLine = pointToLineDistance(clickX, clickY, start, end);
+                const distanceToLine = calculatePointToLineDistance(clickedX, clickedY, start, end);
                 if (distanceToLine < 5) {
-                    const t = ((clickX - start.x) * (end.x - start.x) + (clickY - start.y) * (end.y - start.y)) /
-                              ((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
+                    const t = ((clickedX - start.x) * (end.x - start.x) + (clickedY - start.y) * (end.y - start.y)) / ((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
                     const newX = start.x + t * (end.x - start.x);
                     const newY = start.y + t * (end.y - start.y);
                     return { point: { x: newX, y: newY, z: 0 }, index: i + 1 };
@@ -278,16 +292,16 @@
             return null;
         }
 
-        function pointToLineDistance(px, py, start, end) {
+        // Calculate the distance from a point to a line
+        function calculatePointToLineDistance(px, py, start, end) {
             const A = px - start.x;
             const B = py - start.y;
             const C = end.x - start.x;
             const D = end.y - start.y;
             const dot = A * C + B * D;
-            const len_sq = C * C + D * D;
-            const param = dot / len_sq;
+            const lengthSquared = C * C + D * D;
+            const param = dot / lengthSquared;
             let xx, yy;
-
             if (param < 0 || (start.x === end.x && start.y === end.y)) {
                 xx = start.x;
                 yy = start.y;
@@ -298,104 +312,106 @@
                 xx = start.x + param * C;
                 yy = start.y + param * D;
             }
-
             const dx = px - xx;
             const dy = py - yy;
             return Math.sqrt(dx * dx + dy * dy);
         }
 
-        function distance(point1, point2) {
+        // Calculate the distance between two points
+        function calculateDistance(point1, point2) {
             return Math.sqrt((point2.x - point1.x) ** 2 + (point2.y - point1.y) ** 2 + (point2.z - point1.z) ** 2);
         }
 
+        // Redraw the canvas with all points and lines
         function redrawCanvas() {
-            drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
             for (let i = 0; i < points.length; i++) {
                 drawPoint(points[i]);
-                if (i > 0) {
-                    drawLine(points[i - 1], points[i]);
-                }
+                if (i > 0) drawLine(points[i - 1], points[i]);
             }
-            for (let i = 0; i < mirroredPoints.length; i++) {
-                drawPoint(mirroredPoints[i], 'lightcoral');
-                if (i > 0) {
-                    drawLine(mirroredPoints[i - 1], mirroredPoints[i], 'lightcoral');
-                }
+            for (let i = 0; i < mirrorPoints.length; i++) {
+                drawPoint(mirrorPoints[i], 'lightcoral');
+                if (i > 0) drawLine(mirrorPoints[i - 1], mirrorPoints[i], 'lightcoral');
             }
             for (let i = 0; i < midPoints.length; i++) {
                 drawPoint(midPoints[i], 'lightblue');
-                if (i > 0) {
-                    drawLine(midPoints[i - 1], midPoints[i], 'lightblue');
-                }
+                if (i > 0) drawLine(midPoints[i - 1], midPoints[i], 'lightblue');
             }
-            if (points.length > 1) {
-                drawLine(points[0], points[points.length - 1]);
+            if (points.length > 1) drawLine(points[0], points[points.length - 1]);
+            if (surfaceDisplay && points.length > 1) {
+                createCenterLine();
+                drawSurface();
             }
         }
 
+        // Update the displayed line length
         function updateLineLength() {
             if (points.length > 1) {
                 const start = points[0];
                 const end = points[points.length - 1];
-                const length = distance(start, end);
+                const length = calculateDistance(start, end);
                 document.getElementById('lineLength').innerText = `線の長さ: ${length.toFixed(2)}px`;
             } else {
                 document.getElementById('lineLength').innerText = `線の長さ: 0px`;
             }
         }
 
+        // Create mirror symmetry points
         function createMirrorSymmetry(startPoint, endPoint) {
-            mirroredPoints = points.map(point => {
-                return getMirroredPoint(point, startPoint, endPoint);
-            });
+            mirrorPoints = points.map(point => getMirrorPoint(point, startPoint, endPoint));
             redrawCanvas();
         }
 
-        function getMirroredPoint(point, startPoint, endPoint) {
+        // Get the mirror point of a given point
+        function getMirrorPoint(point, startPoint, endPoint) {
             const dx = endPoint.x - startPoint.x;
             const dy = endPoint.y - startPoint.y;
             const a = (dx * dx - dy * dy) / (dx * dx + dy * dy);
             const b = 2 * dx * dy / (dx * dx + dy * dy);
             const x = a * (point.x - startPoint.x) + b * (point.y - startPoint.y) + startPoint.x;
             const y = b * (point.x - startPoint.x) - a * (point.y - startPoint.y) + startPoint.y;
-            return { x: x, y: y, z: point.z };
+            return { x, y, z: point.z };
         }
 
+        // Create mid points between original points and their mirror points
         function createMidPoints(startPoint, endPoint) {
             midPoints = points.map((point, index) => {
-                const mirroredPoint = mirroredPoints[index];
-                const midX = (point.x + mirroredPoint.x) / 2;
-                const midY = (point.y + mirroredPoint.y) / 2;
-                const midZ = (point.z + mirroredPoint.z) / 2;
+                const mirrorPoint = mirrorPoints[index];
+                const midX = (point.x + mirrorPoint.x) / 2;
+                const midY = (point.y + mirrorPoint.y) / 2;
+                const midZ = (point.z + mirrorPoint.z) / 2;
                 return { x: midX, y: midY, z: midZ };
             });
             redrawCanvas();
         }
 
-        function createCenterLine2() {
-            centerLine2 = midPoints.map(point => ({ ...point }));
+        // Create center line points
+        function createCenterLine() {
+            centerLine = midPoints.map(point => ({ ...point }));
         }
 
+        // Draw the surface between points
         function drawSurface() {
             for (let i = 0; i < points.length; i++) {
                 if (i > 0) {
                     drawLine(points[i], midPoints[i], 'gray');
-                    drawLine(mirroredPoints[i], centerLine2[i], 'gray');
+                    drawLine(mirrorPoints[i], centerLine[i], 'gray');
                     fillQuadrilateral(points[i - 1], midPoints[i - 1], midPoints[i], points[i], 'rgba(211, 211, 211, 0.5)');
-                    fillQuadrilateral(mirroredPoints[i - 1], centerLine2[i - 1], centerLine2[i], mirroredPoints[i], 'rgba(211, 211, 211, 0.5)');
+                    fillQuadrilateral(mirrorPoints[i - 1], centerLine[i - 1], centerLine[i], mirrorPoints[i], 'rgba(211, 211, 211, 0.5)');
                 }
             }
         }
 
+        // Fill a quadrilateral with a given color
         function fillQuadrilateral(p1, p2, p3, p4, color) {
-            drawingCtx.beginPath();
-            drawingCtx.moveTo(p1.x + centerX, p1.y + centerY);
-            drawingCtx.lineTo(p2.x + centerX, p2.y + centerY);
-            drawingCtx.lineTo(p3.x + centerX, p3.y + centerY);
-            drawingCtx.lineTo(p4.x + centerX, p4.y + centerY);
-            drawingCtx.closePath();
-            drawingCtx.fillStyle = color;
-            drawingCtx.fill();
+            drawingContext.beginPath();
+            drawingContext.moveTo(p1.x + centerX, p1.y + centerY);
+            drawingContext.lineTo(p2.x + centerX, p2.y + centerY);
+            drawingContext.lineTo(p3.x + centerX, p3.y + centerY);
+            drawingContext.lineTo(p4.x + centerX, p4.y + centerY);
+            drawingContext.closePath();
+            drawingContext.fillStyle = color;
+            drawingContext.fill();
         }
     </script>
 </body>
