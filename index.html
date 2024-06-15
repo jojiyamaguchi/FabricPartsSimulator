@@ -17,8 +17,7 @@
     <button id="resetButton">線を書き直す</button>
     <div id="lineLength">線の長さ: 0px</div>
     <button id="mirrorSymmetryResetButton">対称線リセット</button>
-    <button id="createSurfaceButton">面作成</button>
-    <label><input type="checkbox" id="surfaceDisplayCheckbox"> 面表示</label>
+    <button id="unfoldButton">展開図作成</button>
     <canvas id="unfoldCanvas" width="500" height="500"></canvas>
 
     <script>
@@ -46,7 +45,6 @@
         let centerLine = [];
         let surfaceDisplay = false;
 
-        // Mouse down event for drawing or dragging points
         drawingCanvas.addEventListener('mousedown', event => {
             if (!currentLine.length) {
                 isDrawing = true;
@@ -79,7 +77,6 @@
             }
         });
 
-        // Mouse move event for drawing or dragging points
         drawingCanvas.addEventListener('mousemove', event => {
             if (isDrawing) {
                 const x = event.offsetX - centerX;
@@ -95,6 +92,15 @@
             } else if (draggedPoint) {
                 draggedPoint.x = event.offsetX - centerX;
                 draggedPoint.y = event.offsetY - centerY;
+                if (points.indexOf(draggedPoint) === 0) {
+                    points[0] = draggedPoint;
+                    mirrorPoints[0] = getMirrorPoint(draggedPoint, points[0], points[points.length - 1]);
+                    midPoints[0] = getMidPoint(draggedPoint, mirrorPoints[0]);
+                } else if (points.indexOf(draggedPoint) === points.length - 1) {
+                    points[points.length - 1] = draggedPoint;
+                    mirrorPoints[mirrorPoints.length - 1] = getMirrorPoint(draggedPoint, points[0], points[points.length - 1]);
+                    midPoints[midPoints.length - 1] = getMidPoint(draggedPoint, mirrorPoints[mirrorPoints.length - 1]);
+                }
                 redrawCanvas();
                 updateLineLength();
             } else if (draggedMirrorPoint) {
@@ -110,7 +116,6 @@
             }
         });
 
-        // Mouse up event to stop drawing or dragging
         drawingCanvas.addEventListener('mouseup', () => {
             if (isDrawing) {
                 isDrawing = false;
@@ -121,20 +126,21 @@
                     createMidPoints(startPoint, endPoint);
                 }
                 lastPoint = null;
+                surfaceDisplay = true;
             }
             draggedPoint = null;
             draggedMirrorPoint = null;
             draggedMidPoint = null;
+            redrawCanvas();
         });
 
-        // Event listeners for rotation buttons
         document.getElementById('rotateXPositiveButton').addEventListener('click', () => rotatePointsX(10));
         document.getElementById('rotateXNegativeButton').addEventListener('click', () => rotatePointsX(-10));
         document.getElementById('rotateYPositiveButton').addEventListener('click', () => rotatePointsY(10));
         document.getElementById('rotateYNegativeButton').addEventListener('click', () => rotatePointsY(-10));
 
-        // Event listener for reset button
         document.getElementById('resetButton').addEventListener('click', () => {
+            surfaceDisplay = false;
             points = [];
             currentLine = [];
             angleX = 0;
@@ -149,7 +155,6 @@
             document.getElementById('lineLength').innerText = `線の長さ: 0px`;
         });
 
-        // Event listener for mirror symmetry reset button
         document.getElementById('mirrorSymmetryResetButton').addEventListener('click', () => {
             if (points.length > 1) {
                 const startPoint = points[0];
@@ -159,26 +164,12 @@
             }
         });
 
-        // Event listener for create surface button
-        document.getElementById('createSurfaceButton').addEventListener('click', () => {
+        document.getElementById('unfoldButton').addEventListener('click', () => {
             if (points.length > 1) {
-                createCenterLine();
-                drawSurface();
+                createUnfoldedView();
             }
         });
 
-        // Event listener for surface display checkbox
-        document.getElementById('surfaceDisplayCheckbox').addEventListener('change', event => {
-            surfaceDisplay = event.target.checked;
-            if (surfaceDisplay && points.length > 1) {
-                createCenterLine();
-                drawSurface();
-            } else {
-                redrawCanvas();
-            }
-        });
-
-        // Rotate points around X-axis
         function rotatePointsX(angleIncrement) {
             angleX = (angleX + angleIncrement) % 360;
             const angleXInRadians = angleIncrement * Math.PI / 180;
@@ -202,7 +193,6 @@
             updateLineLength();
         }
 
-        // Rotate points around Y-axis
         function rotatePointsY(angleIncrement) {
             angleY = (angleY + angleIncrement) % 360;
             const angleYInRadians = angleIncrement * Math.PI / 180;
@@ -226,16 +216,16 @@
             updateLineLength();
         }
 
-        // Draw a point on the canvas
         function drawPoint(point, color = 'black') {
-            const size = Math.max(1, (10 - point.z / 20) * 0.75);
+            const size = Math.max(1, (10 - point.z / 20) * 0.5);
             drawingContext.beginPath();
             drawingContext.arc(point.x + centerX, point.y + centerY, size, 0, 2 * Math.PI);
             drawingContext.fillStyle = color;
+            drawingContext.globalAlpha = 0.5;
             drawingContext.fill();
+            drawingContext.globalAlpha = 1.0;
         }
 
-        // Draw a line between two points on the canvas
         function drawLine(start, end, color = 'black') {
             drawingContext.beginPath();
             drawingContext.moveTo(start.x + centerX, start.y + centerY);
@@ -244,7 +234,6 @@
             drawingContext.stroke();
         }
 
-        // Get the clicked point from the points array
         function getClickedPoint(x, y) {
             for (const point of points) {
                 const dx = x - (point.x + centerX);
@@ -254,7 +243,6 @@
             return null;
         }
 
-        // Get the clicked mirror point from the mirror points array
         function getClickedMirrorPoint(x, y) {
             for (const point of mirrorPoints) {
                 const dx = x - (point.x + centerX);
@@ -264,17 +252,15 @@
             return null;
         }
 
-        // Get the clicked mid point from the mid points array
         function getClickedMidPoint(x, y) {
             for (const point of midPoints) {
                 const dx = x - (point.x + centerX);
-                const dy = y - (point.y + centerY);
+                const dy = y - (point.y + centerX);
                 if (Math.sqrt(dx * dx + dy * dy) < 5) return point;
             }
             return null;
         }
 
-        // Get a new point on the line based on the clicked position
         function getNewPointOnLine(x, y) {
             const clickedX = x - centerX;
             const clickedY = y - centerY;
@@ -292,7 +278,6 @@
             return null;
         }
 
-        // Calculate the distance from a point to a line
         function calculatePointToLineDistance(px, py, start, end) {
             const A = px - start.x;
             const B = py - start.y;
@@ -317,12 +302,10 @@
             return Math.sqrt(dx * dx + dy * dy);
         }
 
-        // Calculate the distance between two points
         function calculateDistance(point1, point2) {
             return Math.sqrt((point2.x - point1.x) ** 2 + (point2.y - point1.y) ** 2 + (point2.z - point1.z) ** 2);
         }
 
-        // Redraw the canvas with all points and lines
         function redrawCanvas() {
             drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
             for (let i = 0; i < points.length; i++) {
@@ -330,12 +313,12 @@
                 if (i > 0) drawLine(points[i - 1], points[i]);
             }
             for (let i = 0; i < mirrorPoints.length; i++) {
-                drawPoint(mirrorPoints[i], 'lightcoral');
-                if (i > 0) drawLine(mirrorPoints[i - 1], mirrorPoints[i], 'lightcoral');
+                drawPoint(mirrorPoints[i], 'red');
+                if (i > 0) drawLine(mirrorPoints[i - 1], mirrorPoints[i], 'red');
             }
             for (let i = 0; i < midPoints.length; i++) {
-                drawPoint(midPoints[i], 'lightblue');
-                if (i > 0) drawLine(midPoints[i - 1], midPoints[i], 'lightblue');
+                drawPoint(midPoints[i], 'blue');
+                if (i > 0) drawLine(midPoints[i - 1], midPoints[i], 'blue');
             }
             if (points.length > 1) drawLine(points[0], points[points.length - 1]);
             if (surfaceDisplay && points.length > 1) {
@@ -344,7 +327,6 @@
             }
         }
 
-        // Update the displayed line length
         function updateLineLength() {
             if (points.length > 1) {
                 const start = points[0];
@@ -356,13 +338,11 @@
             }
         }
 
-        // Create mirror symmetry points
         function createMirrorSymmetry(startPoint, endPoint) {
             mirrorPoints = points.map(point => getMirrorPoint(point, startPoint, endPoint));
             redrawCanvas();
         }
 
-        // Get the mirror point of a given point
         function getMirrorPoint(point, startPoint, endPoint) {
             const dx = endPoint.x - startPoint.x;
             const dy = endPoint.y - startPoint.y;
@@ -370,10 +350,9 @@
             const b = 2 * dx * dy / (dx * dx + dy * dy);
             const x = a * (point.x - startPoint.x) + b * (point.y - startPoint.y) + startPoint.x;
             const y = b * (point.x - startPoint.x) - a * (point.y - startPoint.y) + startPoint.y;
-            return { x, y, z: point.z };
+            return { x: x, y: y, z: point.z };
         }
 
-        // Create mid points between original points and their mirror points
         function createMidPoints(startPoint, endPoint) {
             midPoints = points.map((point, index) => {
                 const mirrorPoint = mirrorPoints[index];
@@ -385,12 +364,10 @@
             redrawCanvas();
         }
 
-        // Create center line points
         function createCenterLine() {
             centerLine = midPoints.map(point => ({ ...point }));
         }
 
-        // Draw the surface between points
         function drawSurface() {
             for (let i = 0; i < points.length; i++) {
                 if (i > 0) {
@@ -402,7 +379,6 @@
             }
         }
 
-        // Fill a quadrilateral with a given color
         function fillQuadrilateral(p1, p2, p3, p4, color) {
             drawingContext.beginPath();
             drawingContext.moveTo(p1.x + centerX, p1.y + centerY);
@@ -412,6 +388,184 @@
             drawingContext.closePath();
             drawingContext.fillStyle = color;
             drawingContext.fill();
+        }
+
+        function getMidPoint(point1, point2) {
+            return {
+                x: (point1.x + point2.x) / 2,
+                y: (point1.y + point2.y) / 2,
+                z: (point1.z + point2.z) / 2
+            };
+        }
+
+        function createUnfoldedView() {
+            unfoldContext.clearRect(0, 0, unfoldCanvas.width, unfoldCanvas.height);
+
+            // Copy points from drawingCanvas to unfoldCanvas
+            const points2 = points.map(point => ({ ...point }));
+            const mirrorPoints2 = mirrorPoints.map(point => ({ ...point }));
+            const midPoints2 = midPoints.map(point => ({ ...point }));
+            const centerLine2 = centerLine.map(point => ({ ...point }));
+
+            // Rotate all copied points so that both start and end points have z=0
+            rotateAllCopiedPointsToZAxis(points2, mirrorPoints2, midPoints2, centerLine2);
+
+            // Draw original points and lines on unfoldCanvas
+            points.forEach(point => {
+                drawUnfoldedPoint(point);
+            });
+
+            for (let i = 0; i < points.length - 1; i++) {
+                drawUnfoldedLine(points[i], points[i + 1]);
+            }
+
+            mirrorPoints.forEach(point => {
+                drawUnfoldedPoint(point, 'red');
+            });
+
+            for (let i = 0; i < mirrorPoints.length - 1; i++) {
+                drawUnfoldedLine(mirrorPoints[i], mirrorPoints[i + 1], 'red');
+            }
+
+            midPoints.forEach(point => {
+                drawUnfoldedPoint(point, 'blue');
+            });
+
+            for (let i = 0; i < midPoints.length - 1; i++) {
+                drawUnfoldedLine(midPoints[i], midPoints[i + 1], 'blue');
+            }
+
+            // Draw lines between points and midPoints
+            for (let i = 0; i < points.length; i++) {
+                drawUnfoldedLine(points[i], midPoints[i], 'gray');
+            }
+
+            // Draw lines between mirrorPoints and centerLine
+            for (let i = 0; i < mirrorPoints.length; i++) {
+                drawUnfoldedLine(mirrorPoints[i], centerLine[i], 'gray');
+            }
+
+            // Draw copied points and lines on unfoldCanvas
+            points2.forEach(point => {
+                drawUnfoldedPoint(point, 'green');
+            });
+
+            for (let i = 0; i < points2.length - 1; i++) {
+                drawUnfoldedLine(points2[i], points2[i + 1], 'green');
+            }
+
+            mirrorPoints2.forEach(point => {
+                drawUnfoldedPoint(point, 'orange');
+            });
+
+            for (let i = 0; i < mirrorPoints2.length - 1; i++) {
+                drawUnfoldedLine(mirrorPoints2[i], mirrorPoints2[i + 1], 'orange');
+            }
+
+            midPoints2.forEach(point => {
+                drawUnfoldedPoint(point, 'purple');
+            });
+
+            for (let i = 0; i < midPoints2.length - 1; i++) {
+                drawUnfoldedLine(midPoints2[i], midPoints2[i + 1], 'purple');
+            }
+
+            // Draw lines between copied points and midPoints
+            for (let i = 0; i < points2.length; i++) {
+                drawUnfoldedLine(points2[i], midPoints2[i], 'gray');
+            }
+
+            // Draw lines between copied mirrorPoints and centerLine
+            for (let i = 0; i < mirrorPoints2.length; i++) {
+                drawUnfoldedLine(mirrorPoints2[i], centerLine2[i], 'gray');
+            }
+
+            // Create and draw quadrilaterals on the left side of the unfoldCanvas
+            let offsetY = 0;
+            for (let i = 0; i < points2.length - 1; i++) {
+                const p1 = points2[i];
+                const p2 = points2[i + 1];
+                const m1 = midPoints2[i];
+                const m2 = midPoints2[i + 1];
+
+                const quad = [
+                    { x: p1.x, y: p1.y + offsetY, z: 0 },
+                    { x: p2.x, y: p2.y + offsetY, z: 0 },
+                    { x: m2.x, y: m2.y + offsetY, z: 0 },
+                    { x: m1.x, y: m1.y + offsetY, z: 0 }
+                ];
+
+                fillUnfoldedQuadrilateral(quad, 'rgba(211, 211, 211, 0.5)');
+                offsetY += Math.max(calculateDistance(p1, p2), calculateDistance(m1, m2)) + 10; // Add some spacing
+            }
+        }
+
+        function drawUnfoldedPoint(point, color = 'black') {
+            const size = Math.max(1, (10 - point.z / 20) * 0.5);
+            unfoldContext.beginPath();
+            unfoldContext.arc(point.x + unfoldCenterX, point.y + unfoldCenterY, size, 0, 2 * Math.PI);
+            unfoldContext.fillStyle = color;
+            unfoldContext.globalAlpha = 0.5;
+            unfoldContext.fill();
+            unfoldContext.globalAlpha = 1.0;
+        }
+
+        function drawUnfoldedLine(start, end, color = 'black') {
+            unfoldContext.beginPath();
+            unfoldContext.moveTo(start.x + unfoldCenterX, start.y + unfoldCenterY);
+            unfoldContext.lineTo(end.x + unfoldCenterX, end.y + unfoldCenterY);
+            unfoldContext.strokeStyle = color;
+            unfoldContext.stroke();
+        }
+
+        function fillUnfoldedQuadrilateral(quad, color) {
+            unfoldContext.beginPath();
+            unfoldContext.moveTo(quad[0].x + unfoldCenterX, quad[0].y + unfoldCenterY);
+            unfoldContext.lineTo(quad[1].x + unfoldCenterX, quad[1].y + unfoldCenterY);
+            unfoldContext.lineTo(quad[2].x + unfoldCenterX, quad[2].y + unfoldCenterY);
+            unfoldContext.lineTo(quad[3].x + unfoldCenterX, quad[3].y + unfoldCenterY);
+            unfoldContext.closePath();
+            unfoldContext.fillStyle = color;
+            unfoldContext.fill();
+        }
+
+        function rotateAllCopiedPointsToZAxis(points2, mirrorPoints2, midPoints2, centerLine2) {
+            if (points2.length < 2) return;
+
+            const startPoint = points2[0];
+            const endPoint = points2[points2.length - 1];
+
+            const angle = Math.atan2(endPoint.z - startPoint.z, endPoint.y - startPoint.y);
+            const angleToRotate = -angle;
+
+            const rotatePoint = (point) => {
+                const y = point.y * Math.cos(angleToRotate) - point.z * Math.sin(angleToRotate);
+                const z = point.y * Math.sin(angleToRotate) + point.z * Math.cos(angleToRotate);
+                return { x: point.x, y, z };
+            };
+
+            points2 = points2.map(rotatePoint);
+            mirrorPoints2 = mirrorPoints2.map(rotatePoint);
+            midPoints2 = midPoints2.map(rotatePoint);
+            centerLine2 = centerLine2.map(rotatePoint);
+
+            // Adjust points to maintain distances and set z=0
+            adjustPointsToZAxis(points2);
+            adjustPointsToZAxis(mirrorPoints2);
+            adjustPointsToZAxis(midPoints2);
+            adjustPointsToZAxis(centerLine2);
+        }
+
+        function adjustPointsToZAxis(points) {
+            for (let i = 1; i < points.length; i++) {
+                const prevPoint = points[i - 1];
+                const currentPoint = points[i];
+                const distance = calculateDistance(prevPoint, currentPoint);
+                const angle = Math.atan2(currentPoint.y - prevPoint.y, currentPoint.x - prevPoint.x);
+                currentPoint.x = prevPoint.x + distance * Math.cos(angle);
+                currentPoint.y = prevPoint.y + distance * Math.sin(angle);
+                currentPoint.z = 0;
+            }
         }
     </script>
 </body>
