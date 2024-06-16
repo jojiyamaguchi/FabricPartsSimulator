@@ -424,10 +424,6 @@
                 const xBetween = (pointsL[index].x + pointsR[index].x) / 2;
                 const yBetween = (pointsL[index].y + pointsR[index].y) / 2;
                 const zBetween = (pointsL[index].z + pointsR[index].z) / 2;
-                //const nextPoint = pointsL[index + 1] || point;
-                //const prevPoint = pointsL[index - 1] || point;
-                //const distToPrevPoint = calculateDistance(point, prevPoint);
-                //const distToNextPoint = calculateDistance(point, nextPoint);
                 const distToPointL = Math.abs(calculateDistance(pointsL[index], pointsR[index])/2);
                 const distToPointR = distToPointL;
                 return new PointsBetween(
@@ -457,9 +453,15 @@
             const middleIndex = Math.floor(pointsBetween.length / 2);
             const baseX = pointsBetween[middleIndex].x;
 
-            let yOffset = 0;
+            let pointsBetweenLength = 0;
+            
+            for(let i = 0; i < pointsBetween.length; i++) {
+              pointsBetweenLength += pointsBetween[i].distToNextPoint;
+            }
+
+            let yOffset = -1*(pointsBetweenLength/2);
             const unfoldedPointsBetween = pointsBetween.map((point, index) => {
-                yOffset += point.distToNextPoint;
+                yOffset += point.distToPrevPoint;
                 return {
                     x: 0,
                     y: yOffset,
