@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -167,7 +166,10 @@
 
         document.getElementById('unfoldButton').addEventListener('click', () => {
             if (points.length > 1) {
-                createUnfoldedView();
+                const unfoldDiagrams = [];
+                unfoldDiagrams.push(createUnfoldDiagram(points, midPoints));
+                unfoldDiagrams.push(createUnfoldDiagram(centerLine, mirrorPoints));
+                arrangeUnfoldDiagrams(unfoldDiagrams);
             }
         });
 
@@ -384,7 +386,7 @@
             drawingContext.beginPath();
             drawingContext.moveTo(p1.x + centerX, p1.y + centerY);
             drawingContext.lineTo(p2.x + centerX, p2.y + centerY);
-            drawingContext.lineTo(p3.x + centerX, p3.y + centerY);
+            drawingContext.lineTo(p3.x + centerX            , p3.y + centerY);
             drawingContext.lineTo(p4.x + centerX, p4.y + centerY);
             drawingContext.closePath();
             drawingContext.fillStyle = color;
@@ -399,234 +401,133 @@
             };
         }
 
-        function createUnfoldedView() {
-            unfoldContext.clearRect(0, 0, unfoldCanvas.width, unfoldCanvas.height);
-
-            // Copy points from drawingCanvas to unfoldCanvas
-            const points2 = points.map(point => ({ ...point }));
-            const mirrorPoints2 = mirrorPoints.map(point => ({ ...point }));
-            const midPoints2 = midPoints.map(point => ({ ...point }));
-            const centerLine2 = centerLine.map(point => ({ ...point }));
-
-            // Rotate all copied points so that both start and end points have z=0
-            rotateAllCopiedPointsToZAxis(points2, mirrorPoints2, midPoints2, centerLine2);
-
-            // Draw original points and lines on unfoldCanvas
-            points.forEach(point => {
-                drawUnfoldedPoint(point);
-            });
-
-            for (let i = 0; i < points.length - 1; i++) {
-                drawUnfoldedLine(points[i], points[i + 1]);
-            }
-
-            mirrorPoints.forEach(point => {
-                drawUnfoldedPoint(point, 'red');
-            });
-
-            for (let i = 0; i < mirrorPoints.length - 1; i++) {
-                drawUnfoldedLine(mirrorPoints[i], mirrorPoints[i + 1], 'red');
-            }
-
-            midPoints.forEach(point => {
-                drawUnfoldedPoint(point, 'blue');
-            });
-
-            for (let i = 0; i < midPoints.length - 1; i++) {
-                drawUnfoldedLine(midPoints[i], midPoints[i + 1], 'blue');
-            }
-
-            // Draw lines between points and midPoints
-            for (let i = 0; i < points.length; i++) {
-                drawUnfoldedLine(points[i], midPoints[i], 'gray');
-            }
-
-            // Draw lines between mirrorPoints and centerLine
-            for (let i = 0; i < mirrorPoints.length; i++) {
-                drawUnfoldedLine(mirrorPoints[i], centerLine[i], 'gray');
-            }
-
-            // Draw copied points and lines on unfoldCanvas
-            points2.forEach(point => {
-                drawUnfoldedPoint(point, 'green');
-            });
-
-            for (let i = 0; i < points2.length - 1; i++) {
-                drawUnfoldedLine(points2[i], points2[i + 1], 'green');
-            }
-
-            mirrorPoints2.forEach(point => {
-                drawUnfoldedPoint(point, 'orange');
-            });
-
-            for (let i = 0; i < mirrorPoints2.length - 1; i++) {
-                drawUnfoldedLine(mirrorPoints2[i], mirrorPoints2[i + 1], 'orange');
-            }
-
-            midPoints2.forEach(point => {
-                drawUnfoldedPoint(point, 'purple');
-            });
-
-            for (let i = 0; i < midPoints2.length - 1; i++) {
-                drawUnfoldedLine(midPoints2[i], midPoints2[i + 1], 'purple');
-            }
-
-            // Draw lines between copied points and midPoints
-            for (let i = 0; i < points2.length; i++) {
-                drawUnfoldedLine(points2[i], midPoints2[i], 'gray');
-            }
-
-            // Draw lines between copied mirrorPoints and centerLine
-            for (let i = 0; i < mirrorPoints2.length; i++) {
-                drawUnfoldedLine(mirrorPoints2[i], centerLine2[i], 'gray');
-            }
-
-            // Create and draw quadrilaterals on the left side of the unfoldCanvas
-            let offsetX =  -50;
-            let offsetY = -50;
-            let remainingQuads = [];
-
-            for (let i = 0; i < points2.length - 1; i++) {
-                const p1 = points2[i];
-                const p2 = points2[i + 1];
-                const m1 = midPoints2[i];
-                const m2 = midPoints2[i + 1];
-
-                const quad = [
-                    { x: p1.x, y: p1.y, z: 0 },
-                    { x: p2.x, y: p2.y, z: 0 },
-                    { x: m2.x, y: m2.y, z: 0 },
-                    { x: m1.x, y: m1.y, z: 0 }
-                ];
-
-                remainingQuads.push(quad);
-            }
-
-            remainingQuads.sort((a, b) => Math.min(a[0].y, a[1].y, a[2].y, a[3].y) - Math.min(b[0].y, b[1].y, b[2].y, b[3].y));
-
-            while (remainingQuads.length > 0) {
-                const quad = remainingQuads.shift();
-                const minY = Math.min(quad[0].y, quad[1].y, quad[2].y, quad[3].y);
-                const offsetYAdjusted = offsetY - minY;
-
-                const movedQuad = quad.map(point => ({
-                    x: point.x + offsetX,
-                    y: point.y + offsetYAdjusted,
-                    z: point.z
-                }));
-
-                fillUnfoldedQuadrilateral(movedQuad, 'rgba(211, 211, 211, 0.5)');
-                offsetY += Math.max(calculateDistance(movedQuad[0], movedQuad[1]), calculateDistance(movedQuad[2], movedQuad[3])) + 10;
-            }
-
-            // Create and draw quadrilaterals on the right side of the unfoldCanvas
-            offsetX = 50;
-            offsetY = -50;
-            remainingQuads = [];
-
-            for (let i = 0; i < mirrorPoints2.length - 1; i++) {
-                const p1 = mirrorPoints2[i];
-                const p2 = mirrorPoints2[i + 1];
-                const m1 = centerLine2[i];
-                const m2 = centerLine2[i + 1];
-
-                const quad = [
-                    { x: p1.x, y: p1.y, z: 0 },
-                    { x: p2.x, y: p2.y, z: 0 },
-                    { x: m2.x, y: m2.y, z: 0 },
-                    { x: m1.x, y: m1.y, z: 0 }
-                ];
-
-                remainingQuads.push(quad);
-            }
-
-            remainingQuads.sort((a, b) => Math.min(a[0].y, a[1].y, a[2].y, a[3].y) - Math.min(b[0].y, b[1].y, b[2].y, b[3].y));
-
-            while (remainingQuads.length > 0) {
-                const quad = remainingQuads.shift();
-                const minY = Math.min(quad[0].y, quad[1].y, quad[2].y, quad[3].y);
-                const offsetYAdjusted = offsetY - minY;
-
-                const movedQuad = quad.map(point => ({
-                    x: point.x + offsetX,
-                    y: point.y + offsetYAdjusted,
-                    z: point.z
-                }));
-
-                fillUnfoldedQuadrilateral(movedQuad, 'rgba(211, 211, 211, 0.5)');
-                //offsetX += Math.max(calculateDistance(movedQuad[0], movedQuad[1]), calculateDistance(movedQuad[2], movedQuad[3])) + 50;
-                offsetY += 10;
+        class PointsBetween {
+            constructor(x, y, z, distToPointL, distToPointR) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+                this.distToPointL = distToPointL;
+                this.distToPointR = distToPointR;
             }
         }
 
-        function drawUnfoldedPoint(point, color = 'black') {
+        class UnfoldDiagram {
+            constructor(pointsL, pointsR, pointsBetween) {
+                this.pointsL = pointsL;
+                this.pointsR = pointsR;
+                this.pointsBetween = pointsBetween;
+            }
+        }
+
+        function createUnfoldDiagram(pointsL, pointsR) {
+            const pointsBetween = pointsL.map((point, index) => {
+                const xBetween = (pointsL[index].x + pointsR[index].x) / 2;
+                const yBetween = (pointsL[index].y + pointsR[index].y) / 2;
+                const zBetween = (pointsL[index].z + pointsR[index].z) / 2;
+                //const nextPoint = pointsL[index + 1] || point;
+                //const prevPoint = pointsL[index - 1] || point;
+                //const distToPrevPoint = calculateDistance(point, prevPoint);
+                //const distToNextPoint = calculateDistance(point, nextPoint);
+                const distToPointL = Math.abs(calculateDistance(pointsL[index], pointsR[index])/2);
+                const distToPointR = distToPointL;
+                return new PointsBetween(
+                    xBetween,
+                    yBetween,
+                    zBetween,
+                    distToPointL,
+                    distToPointR
+                );
+            });
+
+            for (let i = 0; i < pointsBetween.length; i++) {
+              if(i === 0){
+                pointsBetween[i].distToPrevPoint = 0;
+              }
+              else {
+                pointsBetween[i].distToPrevPoint = calculateDistance(pointsBetween[i - 1], pointsBetween[i]);
+              }
+              if(i === (pointsBetween.length - 1)){
+                pointsBetween[i].distToNextPoint = 0;
+              }
+              else {
+                pointsBetween[i].distToNextPoint = calculateDistance(pointsBetween[i], pointsBetween[i + 1]);
+              }
+            }
+
+            const middleIndex = Math.floor(pointsBetween.length / 2);
+            const baseX = pointsBetween[middleIndex].x;
+
+            let yOffset = 0;
+            const unfoldedPointsBetween = pointsBetween.map((point, index) => {
+                yOffset += point.distToNextPoint;
+                return {
+                    x: 0,
+                    y: yOffset,
+                    z: 0
+                };
+            });
+
+            const unfoldedPointsL = unfoldedPointsBetween.map((point, index) => ({
+                x: point.x - pointsBetween[index].distToPointL,
+                y: point.y,
+                z: point.z
+            }));
+
+            const unfoldedPointsR = unfoldedPointsBetween.map((point, index) => ({
+                x: point.x + pointsBetween[index].distToPointR,
+                y: point.y,
+                z: point.z
+            }));
+
+            return new UnfoldDiagram(unfoldedPointsL, unfoldedPointsR, unfoldedPointsBetween);
+        }
+
+        function drawUnfoldDiagram(unfoldDiagram, offsetX, offsetY) {
+            unfoldDiagram.pointsL.forEach((point, index) => {
+                drawUnfoldedPoint(point, 'black', offsetX, offsetY);
+                if (index > 0) {
+                    drawUnfoldedLine(unfoldDiagram.pointsL[index - 1], point, 'black', offsetX, offsetY, 3);
+                }
+            });
+
+            unfoldDiagram.pointsR.forEach((point, index) => {
+                drawUnfoldedPoint(point, 'red', offsetX, offsetY);
+                if (index > 0) {
+                    drawUnfoldedLine(unfoldDiagram.pointsR[index - 1], point, 'red', offsetX, offsetY, 3);
+                }
+            });
+
+            unfoldDiagram.pointsBetween.forEach((point, index) => {
+                drawUnfoldedPoint(point, 'blue', offsetX, offsetY);
+            });
+        }
+
+        function drawUnfoldedPoint(point, color, offsetX, offsetY) {
             const size = Math.max(1, (10 - point.z / 20) * 0.5);
             unfoldContext.beginPath();
-            unfoldContext.arc(point.x + unfoldCenterX, point.y + unfoldCenterY, size, 0, 2 * Math.PI);
+            unfoldContext.arc(point.x + unfoldCenterX + offsetX, point.y + unfoldCenterY + offsetY, size, 0, 2 * Math.PI);
             unfoldContext.fillStyle = color;
             unfoldContext.globalAlpha = 0.5;
             unfoldContext.fill();
             unfoldContext.globalAlpha = 1.0;
         }
 
-        function drawUnfoldedLine(start, end, color = 'black') {
+        function drawUnfoldedLine(start, end, color, offsetX, offsetY, lineWidth = 1) {
             unfoldContext.beginPath();
-            unfoldContext.moveTo(start.x + unfoldCenterX, start.y + unfoldCenterY);
-            unfoldContext.lineTo(end.x + unfoldCenterX, end.y + unfoldCenterY);
+            unfoldContext.moveTo(start.x + unfoldCenterX + offsetX, start.y + unfoldCenterY + offsetY);
+            unfoldContext.lineTo(end.x + unfoldCenterX + offsetX, end.y + unfoldCenterY + offsetY);
             unfoldContext.strokeStyle = color;
+            unfoldContext.lineWidth = lineWidth;
             unfoldContext.stroke();
         }
 
-        function fillUnfoldedQuadrilateral(quad, color) {
-            unfoldContext.beginPath();
-            unfoldContext.moveTo(quad[0].x + unfoldCenterX, quad[0].y + unfoldCenterY);
-            unfoldContext.lineTo(quad[1].x + unfoldCenterX, quad[1].y + unfoldCenterY);
-            unfoldContext.lineTo(quad[2].x + unfoldCenterX, quad[2].y + unfoldCenterY);
-            unfoldContext.lineTo(quad[3].x + unfoldCenterX, quad[3].y + unfoldCenterY);
-            unfoldContext.closePath();
-            unfoldContext.fillStyle = color;
-            unfoldContext.fill();
-        }
+        function arrangeUnfoldDiagrams(unfoldDiagrams) {
+            const offsetX = 100;
+            const offsetY = 0;
 
-        function rotateAllCopiedPointsToZAxis(points2, mirrorPoints2, midPoints2, centerLine2) {
-            if (points2.length < 2) return;
-
-            const startPoint = points2[0];
-            const endPoint = points2[points2.length - 1];
-
-            const angle = Math.atan2(endPoint.z - startPoint.z, endPoint.y - startPoint.y);
-            const angleToRotate = -angle;
-
-            const rotatePoint = (point) => {
-                const y = point.y * Math.cos(angleToRotate) - point.z * Math.sin(angleToRotate);
-                const z = point.y * Math.sin(angleToRotate) + point.z * Math.cos(angleToRotate);
-                return { x: point.x, y, z };
-            };
-
-            points2 = points2.map(rotatePoint);
-            mirrorPoints2 = mirrorPoints2.map(rotatePoint);
-            midPoints2 = midPoints2.map(rotatePoint);
-            centerLine2 = centerLine2.map(rotatePoint);
-
-            // Adjust points to maintain distances and set z=0
-            adjustPointsToZAxis(points2);
-            adjustPointsToZAxis(mirrorPoints2);
-            adjustPointsToZAxis(midPoints2);
-            adjustPointsToZAxis(centerLine2);
-        }
-
-        function adjustPointsToZAxis(points) {
-            for (let i = 1; i < points.length; i++) {
-                const prevPoint = points[i - 1];
-                const currentPoint = points[i];
-                const distance = calculateDistance(prevPoint, currentPoint);
-                const angle = Math.atan2(currentPoint.y - prevPoint.y, currentPoint.x - prevPoint.x);
-                currentPoint.x = prevPoint.x + distance * Math.cos(angle);
-                currentPoint.y = prevPoint.y + distance * Math.sin(angle);
-                currentPoint.z = 0;
-            }
+            drawUnfoldDiagram(unfoldDiagrams[0], -offsetX, offsetY);
+            drawUnfoldDiagram(unfoldDiagrams[1], offsetX, offsetY);
         }
     </script>
 </body>
 </html>
-```
