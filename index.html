@@ -20,7 +20,7 @@
     <button id="unfoldButton">展開図作成</button>
     <button id="unfoldButton2">展開図作成２</button>
     <button id="mergeButton">結合</button>
-    <input type="number" id="toleranceAngle" value="30">許容角度
+    許容角度<input type="number" id="toleranceAngle" value="30">
     <canvas id="angleCanvas" width="100" height="100"></canvas>
     <canvas id="unfoldCanvas" width="500" height="500"></canvas>
 
@@ -52,10 +52,23 @@
         let centerLine = [];
         let surfaceDisplay = false;
 
+        class Point {
+            constructor(x, y, z) {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+                this.adjacentPoints = [];
+            }
+
+            addAdjacentPoint(point) {
+                this.adjacentPoints.push(point);
+            }
+        }
+
         drawingCanvas.addEventListener('mousedown', event => {
             if (!currentLine.length) {
                 isDrawing = true;
-                const startPoint = { x: event.offsetX - centerX, y: event.offsetY - centerY, z: 0 };
+                const startPoint = new Point(event.offsetX - centerX, event.offsetY - centerY, 0);
                 points.push(startPoint);
                 currentLine.push(startPoint);
                 drawPoint(startPoint);
@@ -88,7 +101,7 @@
             if (isDrawing) {
                 const x = event.offsetX - centerX;
                 const y = event.offsetY - centerY;
-                const endPoint = { x, y, z: 0 };
+                const endPoint = new Point(x, y, 0);
                 if (lastPoint && calculateDistance(lastPoint, endPoint) >= 50) {
                     points.push(endPoint);
                     drawPoint(endPoint);
@@ -172,12 +185,27 @@
         });
 
         document.getElementById('unfoldButton').addEventListener('click', () => {
-            if (points.length > 1) {
-                const unfoldDiagrams = [];
-                unfoldDiagrams.push(createUnfoldDiagram(points, midPoints));
-                unfoldDiagrams.push(createUnfoldDiagram(centerLine, mirrorPoints));
-                arrangeUnfoldDiagrams(unfoldDiagrams);
-            }
+            unfoldContext.clearRect(0, 0, unfoldCanvas.width, unfoldCanvas.height);
+            const pointsCopy = points.map(point => new Point(point.x, point.y, point.z));
+            const midPointsCopy = midPoints.map(point => new Point(point.x, point.y, point.z));
+            const centerLineCopy = centerLine.map(point => new Point(point.x, point.y, point.z));
+            const mirrorPointsCopy = mirrorPoints.map(point => new Point(point.x, point.y, point.z));
+
+            // Set adjacent points
+            setAdjacentPoints(pointsCopy, midPointsCopy, centerLineCopy, mirrorPointsCopy);
+
+            // Perform unfolding
+            DoUnfold(pointsCopy);
+
+            // Draw points and lines
+            drawUnfoldedPointsAndLines(pointsCopy, 'black');
+            drawUnfoldedPointsAndLines(mirrorPointsCopy, 'red');
+            drawUnfoldedConnectingLines(pointsCopy, midPointsCopy, 'blue');
+            drawUnfoldedConnectingLines(centerLineCopy, mirrorPointsCopy, 'green');
+
+            // Draw midPoints and centerLine
+            drawUnfoldedPointsAndLines(midPointsCopy, 'blue');
+            drawUnfoldedPointsAndLines(centerLineCopy, 'green');
         });
 
         document.getElementById('unfoldButton2').addEventListener('click', () => {
@@ -222,17 +250,17 @@
             points = points.map(point => {
                 const y = point.y * Math.cos(angleXInRadians) - point.z * Math.sin(angleXInRadians);
                 const z = point.y * Math.sin(angleXInRadians) + point.z * Math.cos(angleXInRadians);
-                return { x: point.x, y, z };
+                return new Point(point.x, y, z);
             });
             mirrorPoints = mirrorPoints.map(point => {
                 const y = point.y * Math.cos(angleXInRadians) - point.z * Math.sin(angleXInRadians);
                 const z = point.y * Math.sin(angleXInRadians) + point.z * Math.cos(angleXInRadians);
-                return { x: point.x, y, z };
+                return new Point(point.x, y, z);
             });
             midPoints = midPoints.map(point => {
                 const y = point.y * Math.cos(angleXInRadians) - point.z * Math.sin(angleXInRadians);
                 const z = point.y * Math.sin(angleXInRadians) + point.z * Math.cos(angleXInRadians);
-                return { x: point.x, y, z };
+                return new Point(point.x, y, z);
             });
             redrawCanvas();
             document.getElementById('xRotationAngle').innerText = `X回転角: ${angleX}度`;
@@ -245,17 +273,17 @@
             points = points.map(point => {
                 const x = point.x * Math.cos(angleYInRadians) - point.z * Math.sin(angleYInRadians);
                 const z = point.x * Math.sin(angleYInRadians) + point.z * Math.cos(angleYInRadians);
-                return { x, y: point.y, z };
+                return new Point(x, point.y, z);
             });
             mirrorPoints = mirrorPoints.map(point => {
                 const x = point.x * Math.cos(angleYInRadians) - point.z * Math.sin(angleYInRadians);
                 const z = point.x * Math.sin(angleYInRadians) + point.z * Math.cos(angleYInRadians);
-                return { x, y: point.y, z };
+                return new Point(x, point.y, z);
             });
             midPoints = midPoints.map(point => {
                 const x = point.x * Math.cos(angleYInRadians) - point.z * Math.sin(angleYInRadians);
                 const z = point.x * Math.sin(angleYInRadians) + point.z * Math.cos(angleYInRadians);
-                return { x, y: point.y, z };
+                return new Point(x, point.y, z);
             });
             redrawCanvas();
             document.getElementById('yRotationAngle').innerText = `Y回転角: ${angleY}度`;
@@ -318,7 +346,7 @@
                     const t = ((clickedX - start.x) * (end.x - start.x) + (clickedY - start.y) * (end.y - start.y)) / ((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
                     const newX = start.x + t * (end.x - start.x);
                     const newY = start.y + t * (end.y - start.y);
-                    return { point: { x: newX, y: newY, z: 0 }, index: i + 1 };
+                    return { point: new Point(newX, newY, 0), index: i + 1 };
                 }
             }
             return null;
@@ -357,7 +385,7 @@
             const vector2 = { x: point3.x - point2.x, y: point3.y - point2.y, z: point3.z - point2.z };
             const dotProduct = vector1.x * vector2.x + vector1.y * vector2.y + vector1.z * vector2.z;
             const magnitude1 = Math.sqrt(vector1.x * vector1.x + vector1.y * vector1.y + vector1.z * vector1.z);
-            const magnitude2 = Math.sqrt(vector2.x * vector2.x + vector2.y * vector2.y + vector2.z * vector2.z);
+            const magnitude2 = Math.sqrt(vector2.x * vector2.y + vector2.z * vector2.z);
             const angle = Math.acos(dotProduct / (magnitude1 * magnitude2)) * (180 / Math.PI);
             return angle;
         }
@@ -376,7 +404,7 @@
                 drawPoint(midPoints[i], 'blue');
                 if (i > 0) drawLine(midPoints[i - 1], midPoints[i], 'blue');
             }
-            if (points.length > 1            ) drawLine(points[0], points[points.length - 1]);
+            if (points.length > 1) drawLine(points[0], points[points.length - 1]);
             if (surfaceDisplay && points.length > 1) {
                 createCenterLine();
                 drawSurface();
@@ -406,7 +434,7 @@
             const b = 2 * dx * dy / (dx * dx + dy * dy);
             const x = a * (point.x - startPoint.x) + b * (point.y - startPoint.y) + startPoint.x;
             const y = b * (point.x - startPoint.x) - a * (point.y - startPoint.y) + startPoint.y;
-            return { x: x, y: y, z: point.z };
+            return new Point(x, y, point.z);
         }
 
         function createMidPoints(startPoint, endPoint) {
@@ -415,7 +443,7 @@
                 const midX = (point.x + mirrorPoint.x) / 2;
                 const midY = (point.y + mirrorPoint.y) / 2;
                 const midZ = (point.z + mirrorPoint.z) / 2;
-                return { x: midX, y: midY, z: midZ };
+                return new Point(midX, midY, midZ);
             });
             redrawCanvas();
         }
@@ -447,111 +475,71 @@
         }
 
         function getMidPoint(point1, point2) {
-            return {
-                x: (point1.x + point2.x) / 2,
-                y: (point1.y + point2.y) / 2,
-                z: (point1.z + point2.z) / 2
-            };
+            return new Point(
+                (point1.x + point2.x) / 2,
+                (point1.y + point2.y) / 2,
+                (point1.z + point2.z) / 2
+            );
         }
 
-        class PointsBetween {
-            constructor(x, y, z, distToPointL, distToPointR) {
-                this.x = x;
-                this.y = y;
-                this.z = z;
-                this.distToPointL = distToPointL;
-                this.distToPointR = distToPointR;
-            }
-        }
-
-        class UnfoldDiagram {
-            constructor(pointsL, pointsR, pointsBetween) {
-                this.pointsL = pointsL;
-                this.pointsR = pointsR;
-                this.pointsBetween = pointsBetween;
-            }
-        }
-
-        function createUnfoldDiagram(pointsL, pointsR) {
-            const pointsBetween = pointsL.map((point, index) => {
-                const xBetween = (pointsL[index].x + pointsR[index].x) / 2;
-                const yBetween = (pointsL[index].y + pointsR[index].y) / 2;
-                const zBetween = (pointsL[index].z + pointsR[index].z) / 2;
-                const distToPointL = Math.abs(calculateDistance(pointsL[index], pointsR[index]) / 2);
-                const distToPointR = distToPointL;
-                return new PointsBetween(
-                    xBetween,
-                    yBetween,
-                    zBetween,
-                    distToPointL,
-                    distToPointR
-                );
-            });
-
-            for (let i = 0; i < pointsBetween.length; i++) {
-                if (i === 0) {
-                    pointsBetween[i].distToPrevPoint = 0;
-                } else {
-                    pointsBetween[i].distToPrevPoint = calculateDistance(pointsBetween[i - 1], pointsBetween[i]);
+        function setAdjacentPoints(points, midPoints, centerLine, mirrorPoints) {
+            for (let i = 0; i < points.length; i++) {
+                if (i > 0) {
+                    points[i].addAdjacentPoint(points[i - 1]);
+                    points[i - 1].addAdjacentPoint(points[i]);
                 }
-                if (i === (pointsBetween.length - 1)) {
-                    pointsBetween[i].distToNextPoint = 0;
-                } else {
-                    pointsBetween[i].distToNextPoint = calculateDistance(pointsBetween[i], pointsBetween[i + 1]);
+                points[i].addAdjacentPoint(midPoints[i]);
+                midPoints[i].addAdjacentPoint(points[i]);
+                centerLine[i].addAdjacentPoint(mirrorPoints[i]);
+                mirrorPoints[i].addAdjacentPoint(centerLine[i]);
+                if (i > 0) {
+                    mirrorPoints[i].addAdjacentPoint(mirrorPoints[i - 1]);
+                    mirrorPoints[i - 1].addAdjacentPoint(mirrorPoints[i]);
+                }
+                if (i > 0) {
+                    midPoints[i].addAdjacentPoint(midPoints[i - 1]);
+                    midPoints[i - 1].addAdjacentPoint(midPoints[i]);
+                }
+                if (i > 0) {
+                    centerLine[i].addAdjacentPoint(centerLine[i - 1]);
+                    centerLine[i - 1].addAdjacentPoint(centerLine[i]);
                 }
             }
-
-            const middleIndex = Math.floor(pointsBetween.length / 2);
-            const baseX = pointsBetween[middleIndex].x;
-
-            let pointsBetweenLength = 0;
-
-            for (let i = 0; i < pointsBetween.length; i++) {
-                pointsBetweenLength += pointsBetween[i].distToNextPoint;
-            }
-
-            let yOffset = -1 * (pointsBetweenLength / 2);
-            const unfoldedPointsBetween = pointsBetween.map((point, index) => {
-                yOffset += point.distToPrevPoint;
-                return {
-                    x: 0,
-                    y: yOffset,
-                    z: 0
-                };
-            });
-
-            const unfoldedPointsL = unfoldedPointsBetween.map((point, index) => ({
-                x: point.x - pointsBetween[index].distToPointL,
-                y: point.y,
-                z: point.z
-            }));
-
-            const unfoldedPointsR = unfoldedPointsBetween.map((point, index) => ({
-                x: point.x + pointsBetween[index].distToPointR,
-                y: point.y,
-                z: point.z
-            }));
-
-            return new UnfoldDiagram(unfoldedPointsL, unfoldedPointsR, unfoldedPointsBetween);
         }
 
-        function drawUnfoldDiagram(unfoldDiagram, offsetX, offsetY) {
-            unfoldDiagram.pointsL.forEach((point, index) => {
-                drawUnfoldedPoint(point, 'black', offsetX, offsetY);
+        function DoUnfold(points) {
+            let moved;
+            do {
+                moved = false;
+                for (const point of points) {
+                    for (const adjacent of point.adjacentPoints) {
+                        const angle = calculateAngle(point, adjacent, point.adjacentPoints[0]);
+                        if (angle !== 0) {
+                            const dz = adjacent.z - point.z;
+                            const distance = calculateDistance(point, adjacent);
+                            const newZ = point.z + dz * Math.cos(angle);
+                            if (calculateDistance({ x: adjacent.x, y: adjacent.y, z: newZ }, adjacent) === distance) {
+                                adjacent.z = newZ;
+                                moved = true;
+                            }
+                        }
+                    }
+                }
+            } while (moved);
+        }
+
+        function drawUnfoldedPointsAndLines(points, color) {
+            points.forEach((point, index) => {
+                drawUnfoldedPoint(point, color, 0, 0);
                 if (index > 0) {
-                    drawUnfoldedLine(unfoldDiagram.pointsL[index - 1], point, 'black', offsetX, offsetY, 3);
+                    drawUnfoldedLine(points[index - 1], point, color, 0, 0);
                 }
             });
+        }
 
-            unfoldDiagram.pointsR.forEach((point, index) => {
-                drawUnfoldedPoint(point, 'black', offsetX, offsetY);
-                if (index > 0) {
-                    drawUnfoldedLine(unfoldDiagram.pointsR[index - 1], point, 'black', offsetX, offsetY, 3);
-                }
-            });
-
-            unfoldDiagram.pointsBetween.forEach((point, index) => {
-                drawUnfoldedPoint(point, 'blue', offsetX, offsetY);
+        function drawUnfoldedConnectingLines(points1, points2, color) {
+            points1.forEach((point, index) => {
+                drawUnfoldedLine(point, points2[index], color, 0, 0);
             });
         }
 
@@ -582,53 +570,6 @@
             unfoldContext.stroke();
         }
 
-        function arrangeUnfoldDiagrams(unfoldDiagrams) {
-            const offsetX = 100;
-            const offsetY = 0;
-
-            drawUnfoldDiagram(unfoldDiagrams[0], -offsetX, offsetY);
-            drawUnfoldDiagram(unfoldDiagrams[1], offsetX, offsetY);
-        }
-
-        function mergeUnfoldDiagrams(toleranceAngle) {
-            const unfoldDiagrams = [createUnfoldDiagram(points, midPoints), createUnfoldDiagram(centerLine, mirrorPoints)];
-            const pointsR = unfoldDiagrams[0].pointsR;
-            const pointsL = unfoldDiagrams[1].pointsL;
-
-            const highlightIndicesR = findMaxAngleIndices(pointsR, toleranceAngle);
-            const highlightIndicesL = findMaxAngleIndices(pointsL, toleranceAngle);
-
-            highlightPoints(unfoldDiagrams[0].pointsR, highlightIndicesR, 'red');
-            highlightPoints(unfoldDiagrams[1].pointsL, highlightIndicesL, 'red');
-        }
-
-        function findMaxAngleIndices(points, toleranceAngle) {
-            let maxIndices = [];
-            for (let i = 1; i < points.length - 1; i++) {
-                let currentIndices = [i - 1, i];
-                let cumulativeAngle = 0;
-                for (let j = i + 1; j < points.length - 1; j++) {
-                    const angle = calculateAngle(points[j - 1], points[j], points[j + 1]);
-                    cumulativeAngle += angle;
-                    if (cumulativeAngle <= toleranceAngle) {
-                        currentIndices.push(j);
-                    } else {
-                        break;
-                    }
-                }
-                if (currentIndices.length > maxIndices.length) {
-                    maxIndices = currentIndices;
-                }
-            }
-            return maxIndices;
-        }
-
-        function highlightPoints(points, indices, color) {
-            indices.forEach(index => {
-                drawUnfoldedPoint(points[index], color, 0, 0);
-            });
-        }
-
         function drawAngleDiagram(angle) {
             angleContext.clearRect(0, 0, angleCanvas.width, angleCanvas.height);
             const centerX = angleCanvas.width / 2;
@@ -649,21 +590,6 @@
             angleContext.beginPath();
             angleContext.arc(centerX, centerY, radius, 0, -radian, true);
             angleContext.stroke();
-        }
-
-        function drawUnfoldedPointsAndLines(points, color) {
-            points.forEach((point, index) => {
-                drawUnfoldedPoint(point, color, 0, 0);
-                if (index > 0) {
-                    drawUnfoldedLine(points[index - 1], point, color, 0, 0);
-                }
-            });
-        }
-
-        function drawUnfoldedConnectingLines(points1, points2, color) {
-            points1.forEach((point, index) => {
-                drawUnfoldedLine(point, points2[index], color, 0, 0);
-            });
         }
 
         drawAngleDiagram(30);
